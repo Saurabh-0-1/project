@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>🌱 EcoTrack — Login + Dashboard + Leaderboard</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root{--bg:#f3f6f9;--card:#ffffff;--accent:#27ae60;--muted:#6b7280}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Segoe UI,Helvetica,Arial;background:var(--bg);color:#1f2937}
+    header{background:linear-gradient(90deg,#164e63 0%, #2c3e50 100%);color:white;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    header .brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px}
+    header .actions{display:flex;gap:10px;align-items:center}
+    .link-btn{background:transparent;border:1px solid rgba(255,255,255,0.12);color:white;padding:8px 10px;border-radius:8px;cursor:pointer}
+
+    /* Centered login */
+    .login-wrap{min-height:calc(100vh - 64px);display:flex;align-items:center;justify-content:center;padding:20px}
+    .login-card{background:var(--card);padding:28px;border-radius:12px;box-shadow:0 12px 40px rgba(16,24,40,0.12);width:360px}
+    .login-card h1{margin:0 0 12px 0;font-size:20px}
+    .login-card input{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #e6e9ef}
+    .login-card .btn{width:100%;padding:12px;background:var(--accent);color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer}
+
+    /* Dashboard grid */
+    .dashboard{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;gap:20px;padding:22px;max-width:1200px;margin:20px auto}
+    .card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(16,24,40,0.08)}
+    .card h2{margin:0 0 12px 0;font-size:18px;display:flex;align-items:center;gap:10px}
+
+    /* Reports */
+    #reportCard form{display:flex;flex-direction:column}
+    input,select{padding:10px;border-radius:8px;border:1px solid #e6e9ef;margin-bottom:10px;font-size:14px}
+    .btn{background:var(--accent);color:white;border:none;padding:10px 12px;border-radius:8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+    ul#reportList{list-style:none;padding-left:0;margin:8px 0 0 0;max-height:220px;overflow:auto}
+    ul#reportList li{padding:8px;border-radius:8px;margin-bottom:8px;background:linear-gradient(90deg,rgba(255,255,255,0.6),#fff);display:flex;align-items:center;justify-content:space-between;gap:10px}
+
+    /* Chart */
+    #pollutionChart{width:100%;height:220px}
+
+    /* Actions */
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .action-btn{padding:12px;border-radius:10px;border:1px solid rgba(0,0,0,0.06);background:white;cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:700}
+
+    /* Gamification card */
+    .stats{display:flex;gap:12px;align-items:center}
+    .stat{background:linear-gradient(180deg,#fff,#f7fafc);padding:12px;border-radius:10px;flex:1;text-align:center}
+    .stat .num{font-weight:800;font-size:20px}
+    .progress{height:12px;background:#e6eef3;border-radius:8px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#2ecc71);width:0}
+
+    /* Map */
+    #map{height:420px;border-radius:10px}
+
+    /* Leaderboard page */
+    .page{max-width:900px;margin:20px auto;padding:20px}
+    .leaderboard{display:flex;flex-direction:column;gap:10px}
+    .leaderboard .row{display:flex;align-items:center;justify-content:space-between;padding:12px;border-radius:8px;background:linear-gradient(90deg,#fff,#fbfbfb)}
+
+    /* Pulsing marker styling (for L.divIcon) */
+    .pulse-marker{width:18px;height:18px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 rgba(39,174,96,0.4);position:relative}
+    .pulse-marker::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:var(--accent);animation:pulse 1.6s infinite;opacity:0.6}
+    @keyframes pulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6}70%{transform:translate(-50%,-50%) scale(2.4);opacity:0}100%{opacity:0}}
+    .pulse-marker.medium{background:orange}
+    .pulse-marker.medium::after{background:orange}
+    .pulse-marker.high{background:red}
+    .pulse-marker.high::after{background:red}
+    .highlight{animation:highlight 0.9s ease-in-out 1}
+    @keyframes highlight{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
+
+    /* Toasts */
+    .toast-wrap{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+    .toast{background:#111827;color:white;padding:10px 14px;border-radius:8px;box-shadow:0 6px 20px rgba(16,24,40,0.3);}
+
+    /* Responsive */
+    @media(max-width:900px){.dashboard{grid-template-columns:1fr;grid-auto-rows:auto} #map{height:320px} .login-card{width:100%}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span style="font-size:20px">🌱</span>EcoTrack</div>
+    <div class="actions">
+      <button id="leaderboardLink" class="link-btn">Leaderboard</button>
+      <button id="logoutBtn" class="link-btn" style="display:none">Logout</button>
+    </div>
+  </header>
+
+  <!-- LOGIN -->
+  <div id="loginView" class="login-wrap" aria-hidden="true">
+    <div class="login-card">
+      <h1>Welcome to EcoTrack</h1>
+      <p style="color:var(--muted);margin:6px 0 12px 0">Sign in to start tracking your impact and compete on the leaderboard.</p>
+      <input id="userName" placeholder="Your name (e.g. Saurabh)" />
+      <input id="userEmail" placeholder="Email (optional)" />
+      <button id="loginBtn" class="btn">Sign in</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboardView" style="display:none">
+    <div class="dashboard">
+
+      <!-- Reports -->
+      <div class="card" id="reportCard">
+        <h2><i class="fas fa-flag"></i> Report Pollution / Deforestation</h2>
+        <form id="reportForm">
+          <input id="locationInput" placeholder="City or area (e.g. Delhi)" required />
+          <select id="riskInput"><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select>
+          <button class="btn" type="submit"><i class="fas fa-paper-plane"></i> Submit Report</button>
+        </form>
+        <ul id="reportList" aria-live="polite"></ul>
+      </div>
+
+      <!-- Chart -->
+      <div class="card" id="analyticsCard">
+        <h2><i class="fas fa-chart-bar"></i> Pollution Trend (PM2.5 estimates)</h2>
+        <canvas id="pollutionChart"></canvas>
+      </div>
+
+      <!-- Actions -->
+      <div class="card" id="actionsCard">
+        <h2><i class="fas fa-hands-helping"></i> Suggested Actions</h2>
+        <div class="actions">
+          <button class="action-btn" id="plantBtn">🌳 Plant Trees</button>
+          <button class="action-btn" id="cleanBtn">🧹 Cleanup Drive</button>
+          <button class="action-btn" id="awarenessBtn">📢 Awareness</button>
+          <button class="action-btn" id="refreshBtn">🔄 Refresh Data</button>
+        </div>
+
+        <div style="margin-top:14px">
+          <h3 style="margin:0 0 8px 0">Your Impact</h3>
+          <div class="stats">
+            <div class="stat"><div style="font-size:12px;color:var(--muted)">Points</div><div id="pointsNum" class="num">0</div></div>
+            <div class="stat"><div style="font-size:12px;color:var(--muted)">CO₂ saved (kg)</div><div id="co2Num" class="num">0</div></div>
+          </div>
+          <div style="margin-top:10px">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Today's CO₂ saved</div>
+            <div class="progress"><i id="co2Bar"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map -->
+      <div class="card" id="mapCard">
+        <h2><i class="fas fa-map"></i> Risk Map</h2>
+        <div id="map"></div>
+      </div>
+
+    </div> <!-- /dashboard grid -->
+  </div>
+
+  <!-- LEADERBOARD PAGE -->
+  <div id="leaderboardView" class="page" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+      <h2 style="margin:0">🏆 Leaderboard</h2>
+      <div>
+        <button id="backToDash" class="btn">Back</button>
+      </div>
+    </div>
+
+    <div class="card leaderboard">
+      <div style="display:flex;justify-content:space-between;gap:10px;padding-bottom:8px;border-bottom:1px solid #eef2f7;margin-bottom:8px">
+        <strong>Rank</strong><strong>User</strong><strong>Points</strong>
+      </div>
+      <div id="leaderRows"></div>
+    </div>
+  </div>
+
+  <!-- hidden input for image capture -->
+  <input id="verifyImageInput" type="file" accept="image/*" capture="environment" style="display:none" />
+
+  <div class="toast-wrap" id="toasts"></div>
+
+  <script>
+    // utilities
+    function toast(msg,t=2200){ const d=document.createElement('div');d.className='toast';d.textContent=msg;document.getElementById('toasts').appendChild(d); setTimeout(()=>d.remove(),t); }
+    function readJsonLocal(k){ return JSON.parse(localStorage.getItem(k)||'null'); }
+    function currentUser(){ return JSON.parse(localStorage.getItem('et_user') || 'null'); }
+    function setUser(u){ localStorage.setItem('et_user', JSON.stringify(u)); }
+
+    // auth UI
+    const loginView = document.getElementById('loginView');
+    const dashboardView = document.getElementById('dashboardView');
+    const leaderboardView = document.getElementById('leaderboardView');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const leaderboardLink = document.getElementById('leaderboardLink');
+
+    function showLogin(){ loginView.style.display='flex'; dashboardView.style.display='none'; leaderboardView.style.display='none'; logoutBtn.style.display='none'; }
+    function showDashboard(){ loginView.style.display='none'; dashboardView.style.display='block'; leaderboardView.style.display='none'; logoutBtn.style.display='inline-block'; updateHeaderName(); }
+    function showLeaderboard(){ loginView.style.display='none'; dashboardView.style.display='none'; leaderboardView.style.display='block'; logoutBtn.style.display='inline-block'; renderLeaderboard(); }
+
+    function updateHeaderName(){ const u=currentUser(); const btn=document.getElementById('leaderboardLink'); btn.textContent = 'Leaderboard'; if(u) btn.insertAdjacentText('afterbegin','Hi '+u.name+' • '); }
+
+    document.getElementById('loginBtn').addEventListener('click', ()=> {
+      const name = document.getElementById('userName').value.trim();
+      const email = document.getElementById('userEmail').value.trim();
+      if(!name){ toast('Enter your name'); return; }
+      const user = { name, email, points: 0, co2: 0, todaysCo2: 0 };
+      setUser(user);
+      // also persist server-side (optional)
+      fetch('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(user) }).catch(()=>{});
+      toast('Signed in as '+name);
+      showDashboard();
+      init();
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', ()=>{ localStorage.removeItem('et_user'); location.reload(); });
+
+    leaderboardLink.addEventListener('click', ()=>{ showLeaderboard(); });
+
+    document.getElementById('backToDash').addEventListener('click', ()=>{ showDashboard(); });
+
+    // map + chart + data
+    const map = L.map('map',{preferCanvas:true}).setView([20.5937,78.9629],5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap contributors'}).addTo(map);
+    const cities = ['Delhi','Mumbai','Chennai','Bengaluru'];
+    const coords = {Delhi:[28.6139,77.2090],Mumbai:[19.0760,72.8777],Chennai:[13.0827,80.2707],Bengaluru:[12.9716,77.5946]};
+    const baseline = {Delhi:120,Mumbai:80,Chennai:40,Bengaluru:60};
+    const pmSamples = {Delhi:[120],Mumbai:[80],Chennai:[40],Bengaluru:[60]};
+    const riskPM = {High:120,Medium:80,Low:40};
+    const markers = {};
+
+    function makePulseIcon(risk){ const cls='pulse-marker '+(risk==='High'?'high':risk==='Medium'?'medium':''); return L.divIcon({className:'', html:'<div class=\"'+cls+'\" style=\"width:18px;height:18px;border-radius:50%\"></div>', iconSize:[18,18], iconAnchor:[9,9]}); }
+    function addMarker(id, city, risk){
+      const latlng = coords[city]||[20.5937,78.9629];
+      const icon = makePulseIcon(risk);
+      const m = L.marker(latlng,{icon}).addTo(map).bindPopup(`<b>${city}</b><br>Risk: ${risk}`);
+      markers[id] = {marker:m,latlng,city,risk};
+      setTimeout(()=>{ if(m._icon) m._icon.classList.add('highlight'); setTimeout(()=>{ if(m._icon) m._icon.classList.remove('highlight'); },900); },150);
+      return m;
+    }
+
+    const ctx = document.getElementById('pollutionChart').getContext('2d');
+    const chart = new Chart(ctx,{ type:'bar', data:{ labels:cities, datasets:[{ label:'PM2.5 (estimate)', data:cities.map(c=>baseline[c]), backgroundColor:cities.map(c=> baseline[c]>=100?'rgba(220,53,69,0.85)': baseline[c]>=60?'rgba(255,159,64,0.85)':'rgba(75,192,192,0.85)') }] }, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}},animation:{duration:800}} });
+
+    function updateChartFromSamples(){
+      const newData = cities.map(c=>{
+        const arr = pmSamples[c];
+        if(!arr || arr.length===0) return baseline[c];
+        return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+      });
+      chart.data.datasets[0].data = newData;
+      chart.data.datasets[0].backgroundColor = newData.map(v=> v>=100?'rgba(220,53,69,0.85)': v>=60?'rgba(255,159,64,0.85)':'rgba(75,192,192,0.85)');
+      chart.update();
+    }
+
+    // load reports
+    async function loadReports(){
+      for(const k in markers){ try{ map.removeLayer(markers[k].marker); } catch(e){} }
+      Object.keys(markers).forEach(k=>delete markers[k]);
+      try{
+        const res = await fetch('/api/reports');
+        if(!res.ok) throw new Error('no api');
+        const data = await res.json();
+        applyReports(data);
+        toast('Loaded reports from server');
+      }catch(e){
+        const demo = [{location:'Delhi',risk:'High'},{location:'Mumbai',risk:'Medium'},{location:'Chennai',risk:'Low'}];
+        applyReports(demo);
+        toast('Loaded demo data (no API)');
+      }
+    }
+
+    function applyReports(list){
+      document.getElementById('reportList').innerHTML = '';
+      for(const c of cities) pmSamples[c] = [baseline[c]];
+      let id = 0;
+      list.forEach(r=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<div><strong>${r.location}</strong><div style='font-size:12px;color:var(--muted)'>Risk: ${r.risk}</div></div><div style='min-width:90px;text-align:right'><button class='btn' data-id='${id}'>View</button></div>`;
+        document.getElementById('reportList').appendChild(li);
+        addMarker(id, r.location, r.risk);
+        if(pmSamples[r.location]) pmSamples[r.location].push(riskPM[r.risk]);
+        id++;
+      });
+      updateChartFromSamples();
+      document.querySelectorAll('#reportList button').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const id = btn.getAttribute('data-id'); const obj = markers[id];
+          if(obj){ map.flyTo(obj.latlng,9,{duration:0.9}); obj.marker.openPopup(); obj.marker._icon.classList.add('highlight'); setTimeout(()=>obj.marker._icon.classList.remove('highlight'),900); }
+        });
+      });
+    }
+
+    // gamification: award and persist to server
+    async function award(userDelta){
+      const u = currentUser();
+      if(!u) return;
+      u.points = (u.points || 0) + (userDelta.points || 0);
+      u.co2 = (u.co2 || 0) + (userDelta.co2 || 0);
+      u.todaysCo2 = (u.todaysCo2 || 0) + (userDelta.co2 || 0);
+      setUser(u);
+      updateStats();
+      renderLeaderboard();
+      // try persist to server
+      try {
+        await fetch('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: u.name, email: u.email, points: u.points, co2: u.co2 }) });
+      } catch(e){}
+    }
+
+    function updateStats(){
+      const u = currentUser();
+      if(!u) return;
+      document.getElementById('pointsNum').textContent = u.points || 0;
+      document.getElementById('co2Num').textContent = u.co2 || 0;
+      const pct = Math.min(100, Math.round(((u.todaysCo2 || 0)/20)*100));
+      document.getElementById('co2Bar').style.width = pct + '%';
+    }
+
+    // actions: verification flow
+    function requestVerification(actionKey, actionLabel){
+      const input = document.getElementById('verifyImageInput');
+      input.dataset.action = actionKey;
+      input.dataset.label = actionLabel;
+      input.click();
+    }
+    document.getElementById('plantBtn').addEventListener('click', ()=> requestVerification('plant','Plant Trees'));
+    document.getElementById('cleanBtn').addEventListener('click', ()=> requestVerification('clean','Cleanup'));
+    document.getElementById('awarenessBtn').addEventListener('click', ()=> requestVerification('awareness','Awareness'));
+
+    document.getElementById('verifyImageInput').addEventListener('change', async function(e){
+      const files = this.files; if(!files || files.length===0) return;
+      const file = files[0];
+      const action = this.dataset.action; const label = this.dataset.label;
+      const user = currentUser(); if(!user){ toast('Please sign in first'); return; }
+      toast('Uploading proof image...');
+      const fd = new FormData(); fd.append('image', file); fd.append('user', user.name); fd.append('action', action);
+      try{
+        const resp = await fetch('/api/verify', { method:'POST', body: fd });
+        if(!resp.ok) throw new Error('Server error');
+        const json = await resp.json();
+        if(json.status === 'accepted' && json.award){
+          award({ points: json.award.points, co2: json.award.co2 });
+          toast(`${label} verified ✅ +${json.award.points} pts, +${json.award.co2} kg CO₂`);
+        } else if(json.status === 'pending'){
+          toast(`${label} submitted for verification — pending approval`);
+          let pend = JSON.parse(localStorage.getItem('et_pending_verifications')||'[]');
+          pend.push({ id: json.id, user: user.name, action, filename: json.filename || null, timestamp: new Date().toISOString() });
+          localStorage.setItem('et_pending_verifications', JSON.stringify(pend));
+        } else {
+          toast('Verification result unknown');
+        }
+      }catch(err){
+        toast('Server unreachable — saved locally for later verification');
+        let pend = JSON.parse(localStorage.getItem('et_pending_verifications')||'[]');
+        pend.push({ id: Date.now(), user: user.name, action, filename: null, timestamp: new Date().toISOString(), offlineImage: true });
+        localStorage.setItem('et_pending_verifications', JSON.stringify(pend));
+      } finally {
+        this.value = '';
+      }
+    });
+
+    // report submit
+    document.getElementById('reportForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const location = document.getElementById('locationInput').value.trim();
+      const risk = document.getElementById('riskInput').value;
+      if(!location) return;
+      const payload = { location, risk };
+      // optimistic UI
+      const id = Object.keys(markers).length;
+      addMarker(id, location, risk);
+      const li = document.createElement('li');
+      li.innerHTML = `<div><strong>${location}</strong><div style='font-size:12px;color:var(--muted)'>Risk: ${risk}</div></div><div style='min-width:90px;text-align:right'><button class='btn' data-id='${id}'>View</button></div>`;
+      document.getElementById('reportList').prepend(li);
+      if(!pmSamples[location]) pmSamples[location] = [];
+      pmSamples[location].push(riskPM[risk]||60);
+      updateChartFromSamples();
+      li.querySelector('button').addEventListener('click', ()=>{ const obj = markers[id]; if(obj){ map.flyTo(obj.latlng,9,{duration:0.9}); obj.marker.openPopup(); } });
+      // award small points for reporting
+      award({ points: 15, co2: 2 });
+      // post to server
+      try{
+        const res = await fetch('/api/reports', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        if(res.ok) toast('Report submitted to server ✅'); else throw new Error('no');
+      }catch(err){ toast('Saved locally (server unreachable)'); }
+      document.getElementById('reportForm').reset();
+    });
+
+    // leaderboard
+    const demoUsers = [ {name:'Ananya',points:420,co2:420}, {name:'Ravi',points:360,co2:320}, {name:'Priya',points:240,co2:180}, {name:'Karan',points:120,co2:90} ];
+    async function getServerUsers(){
+      try{ const r = await fetch('/api/users'); if(!r.ok) throw new Error('no api'); return await r.json(); }catch(e){ return demoUsers; }
+    }
+    async function getLeaderboard(){
+      const me = currentUser() || {name:'Guest',points:0,co2:0};
+      const server = await getServerUsers();
+      const arr = server.slice();
+      const exists = arr.find(x=>x.name===me.name);
+      if(exists){ exists.points = me.points || 0; exists.co2 = me.co2 || 0; } else arr.push({name:me.name,points:me.points||0,co2:me.co2||0});
+      arr.sort((a,b)=>b.points-a.points);
+      return arr;
+    }
+    async function renderLeaderboard(){
+      const rows = await getLeaderboard();
+      const container = document.getElementById('leaderRows'); container.innerHTML='';
+      rows.forEach((r,i)=>{
+        const el = document.createElement('div'); el.className='row';
+        el.innerHTML = `<div style="width:60px">#${i+1}</div><div style="flex:1">${r.name}</div><div style="width:90px;text-align:right">${r.points}</div>`;
+        if(currentUser() && currentUser().name===r.name) el.style.background='linear-gradient(90deg,#f0fff4,#fff)';
+        container.appendChild(el);
+      });
+    }
+
+    // refresh
+    document.getElementById('refreshBtn').addEventListener('click', ()=>{ loadReports(); toast('Data refreshed'); });
+
+    // init after login
+    async function init(){
+      updateStats();
+      await loadReports();
+      await renderLeaderboard();
+    }
+
+    // start based on user
+    if(currentUser()) { showDashboard(); init(); toast('Welcome back, '+currentUser().name); } else showLogin();
+
+  </script>
+</body>
+</html>
